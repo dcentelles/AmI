@@ -23,7 +23,7 @@ namespace ami
 	{
 	}
 
-	void Radio::Init(uint8_t * addr, bool autoAck,
+	void Radio::Init(bool autoAck,
 		int ce,
 		int csn,
 		int sck,
@@ -34,17 +34,15 @@ namespace ami
 		_available = 0;
 		_autoAck = autoAck;
 
-		memcpy(ADR, addr, ADR_WIDTH);
-		SetAddr(ADR);
-
 		_device.InitSPI(ce, csn, sck,mosi,miso,irq);
 
 		_init_io();
 
 		digitalWrite(_device.CE, 0); //make sure device is disabled
 
-		SetAddr(ADR); //Establecer la address del dispositivo
-		_device.Write_Buf(WRITE_REG + BRD_PIPE_ADREG, BROADCAST_ADDRESS, TX_ADR_WIDTH); //Set broadcast addres
+		SetRxAddr(ADR); //Establecer la address del dispositivo
+
+		_device.Write_Buf(WRITE_REG + BRD_PIPE_ADREG, (unsigned char*)BRD_ADDR, TX_ADR_WIDTH); //Set broadcast addres
 
 		_device.RW_Reg(WRITE_REG + EN_RXADDR, 0); //Desactivar todas las pipes
 		_device.RW_Reg(WRITE_REG + DYNPD, ACK_PIPE | OWN_PIPE | BRD_PIPE);     //Activar DPL en las pipes
@@ -110,15 +108,59 @@ namespace ami
 		digitalWrite(_device.CE, 1); //enable radio
 	}
 
-	void Radio::SetAddr(uint8_t *addr)
+	void Radio::SetRxAddr(const uint8_t *addr)
 	{
-		_device.Write_Buf(WRITE_REG + OWN_PIPE_ADREG, addr, ADR_WIDTH);
+		memcpy(ADR, addr, ADR_WIDTH);
+		_setRxAddr();
 	}
 
-	void Radio::SetTxAddr(uint8_t *addr)
+	void Radio::_setRxAddr()
 	{
-		_device.Write_Buf(WRITE_REG + TX_ADDR, addr, ADR_WIDTH); // Writes TX_Address to _device.L01
-		_device.Write_Buf(WRITE_REG + ACK_PIPE_ADREG, addr, ADR_WIDTH); // RX_Addr0 same as TX_Adr for Auto.Ack
+		_device.Write_Buf(WRITE_REG + OWN_PIPE_ADREG, (unsigned char*)ADR, ADR_WIDTH);
+	}
+
+	void Radio::SetRxAddr(uint8_t ad0, uint8_t ad1, uint8_t ad2, uint8_t ad3, uint8_t ad4)
+	{
+		ADR[0] = ad0;
+		ADR[1] = ad1;
+		ADR[2] = ad2;
+		ADR[3] = ad3;
+		ADR[4] = ad4;
+		_setRxAddr();
+	}
+
+	void Radio::BroadcastMode(bool broadcast)
+	{
+		if (broadcast)
+		{
+			_setTxAddr(BRD_ADDR);
+		}
+		else
+		{
+			_setTxAddr(TX_ADR);
+		}
+	}
+
+	void Radio::SetTxAddr(const uint8_t *addr)
+	{
+		memcpy(TX_ADR, addr, ADR_WIDTH);
+		_setTxAddr(TX_ADR);
+	}
+
+	void Radio::_setTxAddr(const uint8_t * addr)
+	{
+		_device.Write_Buf(WRITE_REG + TX_ADDR, (unsigned char*)addr, ADR_WIDTH); // Writes TX_Address to _device.L01
+		_device.Write_Buf(WRITE_REG + ACK_PIPE_ADREG, (unsigned char*)addr, ADR_WIDTH); // RX_Addr0 same as TX_Adr for Auto.Ack
+	}
+
+	void Radio::SetTxAddr(uint8_t ad0, uint8_t ad1, uint8_t ad2, uint8_t ad3, uint8_t ad4)
+	{
+		TX_ADR[0] = ad0;
+		TX_ADR[1] = ad1;
+		TX_ADR[2] = ad2;
+		TX_ADR[3] = ad3;
+		TX_ADR[4] = ad4;
+		_setTxAddr(TX_ADR);
 	}
 
 	void Radio::Read(void * dst, unsigned int req) //Blocking call
