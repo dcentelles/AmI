@@ -170,6 +170,8 @@ namespace ami
 			memcpy(dst, _buff, req);
 			_available = _available - req;
 			memcpy(_buff, _buff + req, _available);
+			//Serial.print("Se han pedido: "); Serial.print(req); Serial.print(" ; ");
+			//Serial.print("Sobran en el buffer: "); Serial.println(_available);
 			return;
 		}
 		else
@@ -178,8 +180,10 @@ namespace ami
 			memcpy(ptr, _buff, _available);
 			ptr += _available;
 			unsigned int left = req - _available;
-
+			//Serial.print("Se han leido del buffer: "); Serial.println(_available);
 			_available = 0;
+			//Serial.print("Se han pedido: "); Serial.print(req); Serial.print(" ; ");
+			//Serial.print("Faltan: "); Serial.println(left);
 			while (left > 0)
 			{
 				while (!_readyForRead());
