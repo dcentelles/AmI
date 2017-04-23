@@ -373,13 +373,14 @@ void updateMasterState()
 	int _lastSecond = second;
 	second = (millis() / 1000) % 60;
 	family = second / 6;
-
+	/*
 	if (second != _lastSecond)
 	{
 		digitalWrite(LEDR, HIGH);
 		delay(10);
 		digitalWrite(LEDR, LOW);
 	}
+	*/
 }
 
 void updateSlaveState()
@@ -389,13 +390,14 @@ void updateSlaveState()
 	
 	second = (lastSyncSecond + (_elapsedMillis / 1000)) % 60;
 	family = second / 6;
-
+	/*
 	if (second != lastSecond)
 	{
 		digitalWrite(LEDR, HIGH);
 		delay(10);
 		digitalWrite(LEDR, LOW);
 	}
+	*/
 }
 
 void updateSecondOnSlave(uint16_t _second)
@@ -597,6 +599,7 @@ void SlaveWork()
 						Serial.print("Sincronizado: "); Serial.println(second);
 						sincronizado = true;
 						digitalWrite(LEDV, HIGH);
+						digitalWrite(LEDR, LOW);
 					}
 					else {
 						Serial.println("Se esparaba un T1");
@@ -605,6 +608,7 @@ void SlaveWork()
 				}
 				else
 				{
+					digitalWrite(LEDR, HIGH);
 					digitalWrite(LEDV, LOW);
 				}
 			}
