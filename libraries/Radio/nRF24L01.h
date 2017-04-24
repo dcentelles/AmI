@@ -36,19 +36,19 @@ public:
 		int miso = 12,
 		int irq = 13)
 	{
-		CE = ce;
-		SCK = sck;
-		CSN = csn;
-		MOSI = mosi;
-		MISO = miso;
-		IRQ = irq;
+		this->CE = ce;
+		this->SCK = sck;
+		this->CSN = csn;
+		this->MOSI = mosi;
+		this->MISO = miso;
+		this->IRQ = irq;
 		
-		pinMode(CE, OUTPUT);
-		pinMode(SCK, OUTPUT);
-		pinMode(CSN, OUTPUT);
-		pinMode(MOSI, OUTPUT);
-		pinMode(MISO, INPUT);
-		pinMode(IRQ, INPUT);
+		pinMode(this->CE, OUTPUT);
+		pinMode(this->SCK, OUTPUT);
+		pinMode(this->CSN, OUTPUT);
+		pinMode(this->MOSI, OUTPUT);
+		pinMode(this->MISO, INPUT);
+		pinMode(this->IRQ, INPUT);
 	}
 	int CE, SCK, CSN, MOSI, MISO, IRQ;
 	unsigned char RW(unsigned char Byte);
