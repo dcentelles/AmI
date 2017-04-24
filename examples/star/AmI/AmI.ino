@@ -2,8 +2,6 @@
 #include <stdint.h>
 #include "tarjeta.h"
 #include <LCD5110_Graph.h>
-#include <StandardCplusplus.h>
-#include <list>
 
 #define IZQ		1		// Valores para la salida de la funcion de teclado
 #define DER		2		// Indican pusador derecho, izquierdo o ambos
@@ -12,7 +10,7 @@
 #define BUFF_SIZE 36
 
 #define NFAMILIES 8
-#define MAXSLAVES 13
+#define MAX_SLAVES_PER_FAMILY 31
 
 using namespace ami;
 
@@ -22,8 +20,6 @@ int second, lastSecond, family, lastFamily,
 lastSyncSecond; //slave
 unsigned long lastSyncMillis; //slave
 int ownFamily; //slave
-
-std::list<uint8_t> * families[NFAMILIES];
 
 Radio radio;
 
@@ -40,7 +36,6 @@ void initShield()
 	display.InitLCD();
 	display.setFont(TinyFont);
 	//display.setFont(SmallFont);
-	digitalWrite(D_LED, HIGH);
 
 	// Inicializacion general de los pines
 	pinMode(PULS1, INPUT);
@@ -51,6 +46,8 @@ void initShield()
 	digitalWrite(PULS1, HIGH);
 	digitalWrite(PULS2, HIGH);
 	pinMode(D_LED, OUTPUT);
+
+ digitalWrite(D_LED, LOW);
 }
 
 // Pasamos de 4 bits a una cifra hexadecimal.
@@ -130,6 +127,8 @@ void requestConf()
 	display.print(msMsg, CENTER, 16);
 	display.update();
 	delay(500);
+
+	int maxSlaves = MAX_SLAVES_PER_FAMILY * NFAMILIES;
 	if (master)
 	{
 		rxAddr = 254;
@@ -151,11 +150,11 @@ void requestConf()
 			pulsado = teclado();
 			if (pulsado == DER) {
 				nslaves++;
-				if (nslaves > MAXSLAVES) nslaves = 1;
+				if (nslaves > maxSlaves) nslaves = 1;
 			}
 			else if (pulsado == IZQ) {
 				nslaves--;
-				if (nslaves == 0) nslaves = MAXSLAVES;
+				if (nslaves == 0) nslaves = maxSlaves;
 			}
 			else if (pulsado == AMBOS) {
 				break;
@@ -177,11 +176,11 @@ void requestConf()
 			pulsado = teclado();
 			if (pulsado == DER) {
 				rxAddr++;
-				if (rxAddr >= MAXSLAVES) rxAddr = 0;
+				if (rxAddr >= maxSlaves) rxAddr = 0;
 			}
 			else if (pulsado == IZQ) {
 				rxAddr--;
-				if (rxAddr >= MAXSLAVES) rxAddr = MAXSLAVES -1;
+				if (rxAddr >= maxSlaves) rxAddr = maxSlaves -1;
 			}
 			else if (pulsado == AMBOS) {
 				break;
@@ -324,12 +323,21 @@ private:
 
 Mensaje mensaje;
 
+struct CommsState
+{
+  uint8_t slaves[NFAMILIES][MAX_SLAVES_PER_FAMILY];
+  uint8_t nSlaves[NFAMILIES];
+  uint8_t nextSlave[NFAMILIES];
+};
+
+CommsState commsState;
 void initMaster()
 {
 	Serial.print("1 Nslaves: "); Serial.println(nslaves);
 	for (int f = 0; f < NFAMILIES; f++)
 	{
-		families[f] = new std::list<uint8_t>();
+		commsState.nSlaves[f] = 0;
+		commsState.nextSlave[f] = 0;
 	}
 
 	Serial.print("2 Nslaves: "); Serial.println(nslaves);
@@ -337,8 +345,10 @@ void initMaster()
 	for (int s = 0; s < nslaves; s++)
 	{
 		int sfamily = s & 0x7;
-		Serial.print("slave: "); Serial.print(s); Serial.print("; family: "); Serial.println(sfamily);
-		families[sfamily]->push_back(s);
+		int nSlaves = commsState.nSlaves[sfamily];
+		commsState.slaves[sfamily][nSlaves] = s;
+		Serial.print("slave: "); Serial.print(commsState.slaves[sfamily][nSlaves]); Serial.print("; family: "); Serial.println(sfamily);
+		commsState.nSlaves[sfamily] += 1;
 	}
 	Serial.print("3 Nslaves: "); Serial.println(nslaves);
 	display.clrScr();
@@ -456,12 +466,14 @@ void MasterWork()
 				}
 
 				//Obtenemos direccion del siguiente esclavo y lo situamos al final de la cola
-				std::list<uint8_t> * familyList = families[family];
-				if (familyList->size() >0)
+				int nSlaves = commsState.nSlaves[family];
+				
+				if (nSlaves > 0)
 				{
-					txAddr = familyList->front();
-					familyList->pop_front();
-					familyList->push_back(txAddr);
+					int nextSlave = commsState.nextSlave[family];
+					txAddr = commsState.slaves[family][nextSlave];
+					nextSlave = (nextSlave + 1) % nSlaves;
+					commsState.nextSlave[family] = nextSlave;
 
 					//Ponemos la radio modo transmision
 					radio.SetTxAddr(txAddr);
