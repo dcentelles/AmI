@@ -4,13 +4,15 @@
 #include <LCD5110_Graph.h>
 #include <StandardCplusplus.h>
 #include <list>
-#include <vector>
 
 #define IZQ		1		// Valores para la salida de la funcion de teclado
 #define DER		2		// Indican pusador derecho, izquierdo o ambos
 #define AMBOS	3		// pulsados
 
-#define BUFF_SIZE 50
+#define BUFF_SIZE 36
+
+#define NFAMILIES 8
+#define MAXSLAVES 13
 
 using namespace ami;
 
@@ -21,7 +23,7 @@ lastSyncSecond; //slave
 unsigned long lastSyncMillis; //slave
 int ownFamily; //slave
 
-std::vector<std::list<uint8_t> *> families;
+std::list<uint8_t> * families[NFAMILIES];
 
 Radio radio;
 
@@ -128,11 +130,10 @@ void requestConf()
 	display.print(msMsg, CENTER, 16);
 	display.update();
 	delay(500);
-	int maxSlaves = 32;
 	if (master)
 	{
 		rxAddr = 254;
-		//Pedimos el número de esclavos
+		//Pedimos el nï¿½mero de esclavos
 		nslaves = 1;
 		char nslavesMsg[20] = "Num. Slaves: 0x   <";
 		int selSlavesPos = strlen(nslavesMsg) - 1;
@@ -150,11 +151,11 @@ void requestConf()
 			pulsado = teclado();
 			if (pulsado == DER) {
 				nslaves++;
-				if (nslaves > maxSlaves) nslaves = 1;
+				if (nslaves > MAXSLAVES) nslaves = 1;
 			}
 			else if (pulsado == IZQ) {
 				nslaves--;
-				if (nslaves == 0) nslaves = maxSlaves;
+				if (nslaves == 0) nslaves = MAXSLAVES;
 			}
 			else if (pulsado == AMBOS) {
 				break;
@@ -176,11 +177,11 @@ void requestConf()
 			pulsado = teclado();
 			if (pulsado == DER) {
 				rxAddr++;
-				if (rxAddr >= maxSlaves) rxAddr = 0;
+				if (rxAddr >= MAXSLAVES) rxAddr = 0;
 			}
 			else if (pulsado == IZQ) {
 				rxAddr--;
-				if (rxAddr >= maxSlaves) rxAddr = maxSlaves-1;
+				if (rxAddr >= MAXSLAVES) rxAddr = MAXSLAVES -1;
 			}
 			else if (pulsado == AMBOS) {
 				break;
@@ -321,12 +322,12 @@ private:
 };
 
 
+Mensaje mensaje;
+
 void initMaster()
 {
 	Serial.print("1 Nslaves: "); Serial.println(nslaves);
-	int nfamilies = 8;
-	families.resize(nfamilies);
-	for (int f = 0; f < nfamilies; f++)
+	for (int f = 0; f < NFAMILIES; f++)
 	{
 		families[f] = new std::list<uint8_t>();
 	}
@@ -405,7 +406,7 @@ void updateSlaveStateOnDisplay()
 void updateMasterStateOnDisplay()
 {
 	display.clrScr();
-	sprintf(msg, "MASTER (ADDR: %d)", rxAddr);
+	sprintf(msg, "MASTER (NODES: %d)", nslaves);
 	display.print(msg, CENTER, 0);
 	sprintf(msg, "Current second: %d", second);
 	display.print(msg, CENTER, 10);
@@ -444,7 +445,7 @@ void MasterWork()
 				digitalWrite(LEDV, LOW);
 
 				//Esperamos un tiempo para que se despierte el esclavo
-				//TODO: tal cual está ahora, el esclavo no apaga la radio nunca, pero estaría bien para ahorrar batería...
+				//TODO: tal cual estï¿½ ahora, el esclavo no apaga la radio nunca, pero estarï¿½a bien para ahorrar baterï¿½a...
 				_lastTime = millis();
 				_elapsed = 0;
 				while (_elapsed < 500)
@@ -466,7 +467,7 @@ void MasterWork()
 					radio.SetTxAddr(txAddr);
 					radio.TxMode();
 
-					//Esperamos a que el esclavo esté en modo escucha
+					//Esperamos a que el esclavo estï¿½ en modo escucha
 					sprintf((char*)buff, "Esperando a: %d", txAddr);
 					updateMasterStateAndDisplay();
 					_lastTime = millis();
@@ -479,7 +480,6 @@ void MasterWork()
 					}
 
 					//Enviamos peticion de datos al esclavo
-					Mensaje mensaje;
 					mensaje.SetTipo(Mensaje::T2);
 					mensaje.SetTr(rxAddr);
 					mensaje.SetRe(txAddr);
@@ -519,7 +519,7 @@ void MasterWork()
 						//mostrarRecepcionT3();
 						digitalWrite(LEDR, LOW);
 						sprintf((char*)buff, "Recibido T3");
-						//TODO: aquí faltaría procesar los datos contenidos en el mensaje T3
+						//TODO: aquï¿½ faltarï¿½a procesar los datos contenidos en el mensaje T3
 					}
 					else
 					{
@@ -534,7 +534,7 @@ void MasterWork()
 				_lastTime = millis();
 				_elapsed = 0;
 				//Esperamos un tiempo para que se despierten los esclavos
-				//TODO: tal cual está ahora, el esclavo no apaga la radio nunca, pero estaría bien para ahorrar batería...
+				//TODO: tal cual estï¿½ ahora, el esclavo no apaga la radio nunca, pero estarï¿½a bien para ahorrar baterï¿½a...
 				while (_elapsed < 500)
 				{
 					delay(10);
@@ -543,7 +543,6 @@ void MasterWork()
 				}
 				digitalWrite(LEDV, HIGH);
 				//Enviamos sincronizamos todos los esclavos (broadcast)
-				Mensaje mensaje;
 				mensaje.SetTipo(Mensaje::T1);
 				mensaje.SetTr(255);
 				radio.SetTxAddr(255);
@@ -569,6 +568,7 @@ void MasterWork()
 	}
 }
 
+/*
 void parpadeo(uint8_t pin, int ms, int iter)
 {
 	uint8_t pinValue = bitRead(PORTD, pin);
@@ -597,10 +597,10 @@ void mostrarRecepcionT3()
 {
 	parpadeo(LEDR, 25, 5);
 }
+*/
 
 void SlaveWork()
 {
-	Mensaje mensaje;
 	radio.RxMode();
 	updateSlaveState();
 	bool received;
