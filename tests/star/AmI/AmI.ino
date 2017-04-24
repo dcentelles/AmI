@@ -74,7 +74,7 @@ int teclado()
 
 void requestConf()
 {
-	rxAddr = 1;
+	rxAddr = 0;
 	master = false;
 
 	char addrMsg[20] = "ADDR: 0x    ";
@@ -213,6 +213,7 @@ public:
 		int n = radio.Available();
 		if (n > 0)
 		{
+			Serial.print("Available: "); Serial.println(n);
 			uint8_t * ptr = msg.Buffer;
 			radio.Read(ptr, 1); 
 			Tipo tipo = (Tipo) *ptr;
@@ -367,44 +368,25 @@ void setup()
 	initShield();
 	requestConf();
 }
-
-void updateMasterState()
+void updateSlaveStateAndDisplay()
 {
-	int _lastSecond = second;
-	second = (millis() / 1000) % 60;
-	family = second / 6;
-	/*
-	if (second != _lastSecond)
-	{
-		digitalWrite(LEDR, HIGH);
-		delay(10);
-		digitalWrite(LEDR, LOW);
-	}
-	*/
+	updateSlaveState();
+	updateSlaveStateOnDisplay();
 }
 
 void updateSlaveState()
 {
 	lastSecond = second;
 	unsigned long _elapsedMillis = millis() - lastSyncMillis;
-	
+
 	second = (lastSyncSecond + (_elapsedMillis / 1000)) % 60;
 	family = second / 6;
-	/*
-	if (second != lastSecond)
-	{
-		digitalWrite(LEDR, HIGH);
-		delay(10);
-		digitalWrite(LEDR, LOW);
-	}
-	*/
 }
-
 void updateSecondOnSlave(uint16_t _second)
 {
 	lastSyncSecond = _second;
 	lastSyncMillis = millis();
-	updateSlaveState();
+	updateSlaveStateAndDisplay();
 }
 
 void updateSlaveStateOnDisplay()
@@ -433,16 +415,24 @@ void updateMasterStateOnDisplay()
 	display.update();
 }
 
-void displayMasterLog(const char* log)
+void updateMasterStateAndDisplay()
 {
-	//display.print("                  ", CENTER, 30);
-	display.print(log, CENTER, 30);
-	display.update();
+	updateMasterState();
+	updateMasterStateOnDisplay();
+}
+
+void updateMasterState()
+{
+	int _lastSecond = second;
+	second = (millis() / 1000) % 60;
+	family = second / 6;
 }
 
 void MasterWork()
 {
 	updateMasterState();
+	unsigned long _lastTime;
+	unsigned long _elapsed;
 	if (second != lastSecond) {
 		updateMasterStateOnDisplay();
 		lastSecond = second;
@@ -452,6 +442,18 @@ void MasterWork()
 			if(family < 8) //Pedimos datos a un esclavo
 			{
 				digitalWrite(LEDV, LOW);
+
+				//Esperamos un tiempo para que se despierte el esclavo
+				//TODO: tal cual está ahora, el esclavo no apaga la radio nunca, pero estaría bien para ahorrar batería...
+				_lastTime = millis();
+				_elapsed = 0;
+				while (_elapsed < 500)
+				{
+					delay(10);
+					updateMasterStateAndDisplay();
+					_elapsed = millis() - _lastTime;
+				}
+
 				//Obtenemos direccion del siguiente esclavo y lo situamos al final de la cola
 				std::list<uint8_t> * familyList = families[family];
 				if (familyList->size() >0)
@@ -466,12 +468,13 @@ void MasterWork()
 
 					//Esperamos a que el esclavo esté en modo escucha
 					sprintf((char*)buff, "Esperando a: %d", txAddr);
-					updateMasterStateOnDisplay();
-					unsigned long _lastTime = millis();
-					unsigned long _elapsed = 0;
+					updateMasterStateAndDisplay();
+					_lastTime = millis();
+					_elapsed = 0;
 					while (_elapsed < 1000)
 					{
 						delay(10);
+						updateMasterStateAndDisplay();
 						_elapsed = millis() - _lastTime;
 					}
 
@@ -480,11 +483,10 @@ void MasterWork()
 					mensaje.SetTipo(Mensaje::T2);
 					mensaje.SetTr(rxAddr);
 					mensaje.SetRe(txAddr);
+					//mostrarEnvioT2();
 					radio.Write(mensaje.Buffer, mensaje.Length());
 					sprintf((char*)buff, "Enviado T2");
-					updateMasterStateOnDisplay();
-					
-					delay(50);
+					updateMasterStateAndDisplay();
 					radio.RxMode();
 					//Esperamos respuesta del esclavo
 					_lastTime = millis();
@@ -495,13 +497,9 @@ void MasterWork()
 						received = Mensaje::GetNextMessage(radio, mensaje);
 						if (received)
 						{
-							if (mensaje.GetTipo() == Mensaje::T3)
+							if (mensaje.GetTipo() == Mensaje::T3 && mensaje.GetRe() == rxAddr)
 							{
-								if (mensaje.GetTr() == txAddr)
-								{
-									sprintf((char*)buff, "Recivido T3");
-								}
-								else
+								if (mensaje.GetTr()!= txAddr)
 								{
 									sprintf((char*)buff, "Error origen T3");
 									received = false;
@@ -512,26 +510,37 @@ void MasterWork()
 								sprintf((char*)buff, "Error Tipo mensaje");
 								received = false;
 							}
-							break;
 						}
-						updateMasterState();
-						updateMasterStateOnDisplay();
+						updateMasterStateAndDisplay();
 						_elapsed = millis() - _lastTime;
 					}
 					if (received)
 					{
-						
+						//mostrarRecepcionT3();
+						digitalWrite(LEDR, LOW);
+						sprintf((char*)buff, "Recibido T3");
+						//TODO: aquí faltaría procesar los datos contenidos en el mensaje T3
 					}
 					else
 					{
+						digitalWrite(LEDR, HIGH);
 						sprintf((char*)buff, "T3 Timeout");
 					}
-					updateMasterState();
-					updateMasterStateOnDisplay();
+					updateMasterStateAndDisplay();
 				}
 			}
 			else if (family == 8)
 			{
+				_lastTime = millis();
+				_elapsed = 0;
+				//Esperamos un tiempo para que se despierten los esclavos
+				//TODO: tal cual está ahora, el esclavo no apaga la radio nunca, pero estaría bien para ahorrar batería...
+				while (_elapsed < 500)
+				{
+					delay(10);
+					updateMasterStateAndDisplay();
+					_elapsed = millis() - _lastTime;
+				}
 				digitalWrite(LEDV, HIGH);
 				//Enviamos sincronizamos todos los esclavos (broadcast)
 				Mensaje mensaje;
@@ -540,7 +549,6 @@ void MasterWork()
 				radio.SetTxAddr(255);
 				mensaje.SetRe(txAddr);
 				radio.TxMode();
-				delay(50);
 				sprintf((char*)buff, "Sincronizando Eclavos");
 				updateMasterStateOnDisplay();
 				//Comprobamos segundo actual
@@ -549,10 +557,9 @@ void MasterWork()
 				while (_currentSecond == second) {
 					updateMasterState();
 				}
-				updateMasterStateOnDisplay();
 				mensaje.SetTiempo(second);
 				radio.Write(mensaje.Buffer, mensaje.Length());
-				delay(50);
+				updateMasterStateAndDisplay();
 				radio.RxMode();
 			}
 			else {
@@ -562,32 +569,114 @@ void MasterWork()
 	}
 }
 
+void parpadeo(uint8_t pin, int ms, int iter)
+{
+	uint8_t pinValue = bitRead(PORTD, pin);
+	uint8_t i = 0;
+	while (i < iter)
+	{
+		digitalWrite(pin, !pinValue);
+		delay(ms);
+		digitalWrite(pin, pinValue);
+		delay(ms);
+		i++;
+	}
+}
+
+void mostrarRecepcionT2()
+{
+	parpadeo(LEDR, 25, 5);
+}
+
+void mostrarEnvioT2()
+{
+	parpadeo(LEDR, 25, 5);
+}
+
+void mostrarRecepcionT3()
+{
+	parpadeo(LEDR, 25, 5);
+}
+
 void SlaveWork()
 {
 	Mensaje mensaje;
 	radio.RxMode();
 	updateSlaveState();
+	bool received;
+	unsigned long _lastTime;
+	unsigned long _elapsed;
 	if (second != lastSecond)
 	{
-		updateSlaveStateOnDisplay();
+		updateSlaveStateAndDisplay();
 		if (family == ownFamily && sincronizado && !firstIteration)
 		{
+			//TODO: Encender la radio (radio.On()) (por ahora esta siempre encendida, pero debe apagarse cuando no se usa)
 			sprintf((char*)buff, "Wait Master Req.");
-			updateSlaveStateOnDisplay();
-			sincronizado = false;
+			updateSlaveStateAndDisplay();
+			sincronizado = false; 
+
+			//Esperamos T2
+			radio.RxMode();
+			_lastTime = millis();
+			_elapsed = 0;
+			received = false;
+			while (_elapsed < 2000)
+			{
+				received = Mensaje::GetNextMessage(radio, mensaje);
+				if (received)
+				{
+					if (mensaje.GetTipo() == Mensaje::T2 && mensaje.GetRe() == rxAddr)
+					{
+						received = true;
+						break;
+					}
+				}
+				delay(10);
+				updateSlaveStateAndDisplay();
+				_elapsed = millis() - _lastTime;
+			}
+			if (received)
+			{
+				//mostrarRecepcionT2();
+				digitalWrite(LEDR, LOW);
+				sprintf((char*)buff, "Recibido T2");
+				updateSlaveStateAndDisplay();
+				//Enviamos T3
+				radio.TxMode();
+				mensaje.SetTr(rxAddr);
+				txAddr = 254;//Destino master
+				mensaje.SetRe(txAddr);
+				mensaje.SetTipo(Mensaje::T3);
+				radio.SetTxAddr(txAddr);
+				
+				//Esperamos un tiempo para asegurarnos que el Master esta en modo RX
+				delay(250); 
+				
+				radio.Write(mensaje.Buffer, mensaje.Length());
+				sprintf((char*)buff, "Enviado T3");
+				updateSlaveStateAndDisplay();
+			}
+			else
+			{
+				digitalWrite(LEDR, HIGH);
+			}
+			updateSlaveStateAndDisplay();
+			radio.RxMode();
 
 		}
 		else if (family == 8 && !sincronizado || firstIteration) //Esperar sincronizacion
 		{
+			//TODO: Encender la radio (por ahora esta siempre encendida, pero debe apagarse cuando no se usa)
 			firstIteration = false;
 			//Esperamos mensaje de sincronizacion
+			radio.RxMode();
 			sprintf((char*)buff, "Wait Sync. msg");
-			updateSlaveStateOnDisplay();
-			bool received = false;
-			while (! sincronizado)
+			updateSlaveStateAndDisplay();
+			received = false;
+			while (!sincronizado)
 			{
-				updateSlaveState();
-				updateSlaveStateOnDisplay();
+				updateSlaveStateAndDisplay();
 				received = Mensaje::GetNextMessage(radio, mensaje);
 				if (received)
 				{
@@ -595,11 +684,10 @@ void SlaveWork()
 					{
 						updateSecondOnSlave(mensaje.GetTiempo());
 						sprintf((char*)buff, "Sync: %d", second);
-						updateSlaveStateOnDisplay();
+						updateSlaveStateAndDisplay();
 						Serial.print("Sincronizado: "); Serial.println(second);
 						sincronizado = true;
 						digitalWrite(LEDV, HIGH);
-						digitalWrite(LEDR, LOW);
 					}
 					else {
 						Serial.println("Se esparaba un T1");
@@ -608,15 +696,21 @@ void SlaveWork()
 				}
 				else
 				{
-					digitalWrite(LEDR, HIGH);
-					digitalWrite(LEDV, LOW);
+					updateSlaveStateAndDisplay();
+					if(family != 8)
+					{
+						digitalWrite(LEDR, HIGH);
+						digitalWrite(LEDV, LOW);
+					}
 				}
 			}
 		}
 		else if(!firstIteration && family != 8 && family != ownFamily)
 		{
 			sprintf((char*)buff, "Sleep");
-			updateSlaveStateOnDisplay();
+			updateSlaveStateAndDisplay();
+			//TODO: apagar radio: radio.Off();
+			//TODO: dormir la CPU de la Arduino
 		}
 	}
 }

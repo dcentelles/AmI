@@ -13,6 +13,7 @@ namespace ami
 #define OWN_PIPE 0x2
 #define ACK_PIPE 0x4
 
+#define STATE_DELAY 50
 
 	Radio::Radio()
 	{
@@ -96,16 +97,19 @@ namespace ami
 		_device.RW_Reg(WRITE_REG + CONFIG, 0x0e); // Set PWR_UP bit, enable CRC(2 unsigned chars) & Prim:TX. MAX_RT & TX_DS enabled..
 
 		digitalWrite(_device.CE, 1); //enable radio
+		delay(STATE_DELAY); //Esperamos un tiempo para asegurarnos de que el dispositivo este en modo TX
 	}
 	
 	void Radio::RxMode(void)
 	{
+		delay(STATE_DELAY); //Esperamos un tiempo prudencial por si hay datos transmitiendose
 		digitalWrite(_device.CE, 0); //disable radio
 		
 		_device.RW_Reg(WRITE_REG + EN_RXADDR, OWN_PIPE | BRD_PIPE); //Activar pipe propia y de broadcast
 		_device.RW_Reg(WRITE_REG + CONFIG, 0x0f); // Set PWR_UP bit, enable CRC(2 unsigned chars) & Prim:RX. RX_DR enabled..
 
 		digitalWrite(_device.CE, 1); //enable radio
+		delay(STATE_DELAY); //Esperamos un tiempo para asegurarnos de que el dispositivo este en modo RX
 	}
 
 	void Radio::SetRxAddr(const uint8_t *addr)
@@ -170,8 +174,8 @@ namespace ami
 			memcpy(dst, _buff, req);
 			_available = _available - req;
 			memcpy(_buff, _buff + req, _available);
-			//Serial.print("Se han pedido: "); Serial.print(req); Serial.print(" ; ");
-			//Serial.print("Sobran en el buffer: "); Serial.println(_available);
+			Serial.print("Se han pedido: "); Serial.print(req); Serial.print(" ; ");
+			Serial.print("Sobran en el buffer: "); Serial.println(_available);
 			return;
 		}
 		else
@@ -180,10 +184,10 @@ namespace ami
 			memcpy(ptr, _buff, _available);
 			ptr += _available;
 			unsigned int left = req - _available;
-			//Serial.print("Se han leido del buffer: "); Serial.println(_available);
+			Serial.print("Se han leido del buffer: "); Serial.println(_available);
 			_available = 0;
-			//Serial.print("Se han pedido: "); Serial.print(req); Serial.print(" ; ");
-			//Serial.print("Faltan: "); Serial.println(left);
+			Serial.print("Se han pedido: "); Serial.print(req); Serial.print(" ; ");
+			Serial.print("Faltan: "); Serial.println(left);
 			while (left > 0)
 			{
 				while (!_readyForRead());
