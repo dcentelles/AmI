@@ -248,17 +248,17 @@ public:
 			switch (tipo)
 			{
 			case T1:
-				Serial.print("Leyendo: "); Serial.println(T1L);
+				//Serial.print("Leyendo: "); Serial.println(T1L);
 				radio.Read(ptr, T1L);
 				Serial.println("Recibido T1");
 				break;
 			case T2:
-				Serial.print("Leyendo: "); Serial.println(T2L);
+				//Serial.print("Leyendo: "); Serial.println(T2L);
 				radio.Read(ptr, T2L);
 				Serial.println("Recibido T2");
 				break;
 			case T3:
-				Serial.print("Leyendo: "); Serial.println(T3L);
+				//Serial.print("Leyendo: "); Serial.println(T3L);
 				radio.Read(ptr, T3L);
 				Serial.println("Recibido T3");
 				break;
