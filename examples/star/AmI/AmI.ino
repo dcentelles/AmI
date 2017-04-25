@@ -12,6 +12,7 @@
 
 #define NFAMILIES 8
 #define MAX_SLAVES_PER_FAMILY 31
+#define MAX_CHANNELS 126
 
 using namespace ami;
 
@@ -21,7 +22,7 @@ int second, lastSecond, family, lastFamily,
 lastSyncSecond; //slave
 unsigned long lastSyncMillis; //slave
 int ownFamily; //slave
-
+uint8_t channel;
 Radio radio;
 
 LCD5110 display(D_SCK, D_MOSI, D_DC, D_RES, D_CS);
@@ -76,10 +77,12 @@ void requestConf()
 {
 	rxAddr = 0;
 	master = false;
+	channel = 62;
+	int pulsado;
 
 	char addrMsg[20] = "ADDR: 0x    ";
 	char msMsg[20] = "Master/Slave: S  ";
-
+	char chMsg[20];
 	int selAddrPos = strlen(addrMsg) - 1;
 	int selMsPos = strlen(msMsg) - 1;
 
@@ -91,15 +94,38 @@ void requestConf()
 	addrMsg[d1pos] = ByteAHexa(rxAddr >> 4);
 	addrMsg[d0pos] = ByteAHexa(rxAddr & 0xf);
 
-	addrMsg[selAddrPos] = '<';
+	//Pedimos el canal de transmision
+	while (1)
+	{
+		display.clrScr();
+		sprintf(chMsg, "Channel: %d <", channel);
+		display.print(chMsg, CENTER, 0);
+		display.update();
+		delay(100);
+		pulsado = teclado();
+		pulsado = teclado();
+		if (pulsado == DER) {
+			channel++;
+			if (channel > MAX_CHANNELS) channel = 0;
+		}
+		else if (pulsado == IZQ) {
+			channel--;
+			if (channel > MAX_CHANNELS) channel = MAX_CHANNELS - 1;
+		}
+		else if (pulsado == AMBOS) {
+			break;
+		}
+		
+	}
 
+	sprintf(chMsg, "Channel: %d", channel);
+	radio.SetChannel(channel);
+	delay(200);
 	display.clrScr();
-	display.print("Configuration:", CENTER, 0);
-	display.print(msMsg, CENTER, 16);
+	display.print(chMsg, CENTER, 0);
 	display.update();
 
-	int pulsado;
-
+	addrMsg[selAddrPos] = '<';
 	//Pedimos si es master (inicia comms.) o esclavo (espera)
 	while (1)
 	{
@@ -127,7 +153,7 @@ void requestConf()
 	msMsg[selMsPos] = ' ';
 	display.print(msMsg, CENTER, 16);
 	display.update();
-	delay(500);
+	delay(200);
 
 	int maxSlaves = MAX_SLAVES_PER_FAMILY * NFAMILIES;
 	if (master)
@@ -375,7 +401,6 @@ void setup()
 		RF_MOSI,
 		RF_MISO,
 		RF_IRQ);
-	radio.SetChannel(40);
 
 	initShield();
 	requestConf();
@@ -408,7 +433,7 @@ void updateSlaveStateOnDisplay()
 	//SPI.end();
 	/**/
 	display.clrScr();
-	sprintf(msg, "SLAVE (ADDR: %d)", rxAddr);
+	sprintf(msg, "%d;SLAVE;ADDR:%d", channel, rxAddr);
 	display.print(msg, CENTER, 0);
 	sprintf(msg, "Current second: %d", second);
 	display.print(msg, CENTER, 10);
@@ -423,7 +448,7 @@ void updateMasterStateOnDisplay()
 {
 	//SPI.end();
 	display.clrScr();
-	sprintf(msg, "MASTER (NODES: %d)", nslaves);
+	sprintf(msg, "%d;MASTER;NODES:%d", channel, nslaves);
 	display.print(msg, CENTER, 0);
 	sprintf(msg, "Current second: %d", second);
 	display.print(msg, CENTER, 10);
